@@ -1,0 +1,7 @@
+*.json
+.DS_Store
+testOutput/
+testResults/
+blockResults/
+*.ukey
+*.wat
