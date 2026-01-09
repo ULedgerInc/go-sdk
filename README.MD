@@ -3,7 +3,7 @@
 ## Installation
 
 ```bash
-go get github.com/ULedgerInc/golang-sdk
+go get github.com/ULedgerInc/go-sdk
 ```
 
 ## Usage Examples
