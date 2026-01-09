@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ULedgerInc/golang-sdk/pkg/crypto"
-	"github.com/ULedgerInc/golang-sdk/pkg/utils"
+	"github.com/ULedgerInc/go-sdk/pkg/crypto"
+	"github.com/ULedgerInc/go-sdk/pkg/utils"
 )
 
 type UL_Wallet struct {

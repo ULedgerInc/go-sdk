@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ULedgerInc/golang-sdk/pkg/crypto"
+	"github.com/ULedgerInc/go-sdk/pkg/crypto"
 )
 
 func TestGetWalletFromPrivateKey(t *testing.T) {

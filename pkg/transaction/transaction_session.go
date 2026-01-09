@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ULedgerInc/golang-sdk/pkg/crypto"
-	"github.com/ULedgerInc/golang-sdk/pkg/wallet"
+	"github.com/ULedgerInc/go-sdk/pkg/crypto"
+	"github.com/ULedgerInc/go-sdk/pkg/wallet"
 )
 
 type UL_TransactionSession struct {

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ULedgerInc/golang-sdk/pkg/crypto"
-	"github.com/ULedgerInc/golang-sdk/pkg/wallet"
+	"github.com/ULedgerInc/go-sdk/pkg/crypto"
+	"github.com/ULedgerInc/go-sdk/pkg/wallet"
 )
 
 func TestNewTransactionSession(t *testing.T) {

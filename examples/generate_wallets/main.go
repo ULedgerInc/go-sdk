@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ULedgerInc/golang-sdk/pkg/crypto"
-	"github.com/ULedgerInc/golang-sdk/pkg/wallet"
+	"github.com/ULedgerInc/go-sdk/pkg/crypto"
+	"github.com/ULedgerInc/go-sdk/pkg/wallet"
 	"github.com/urfave/cli/v3"
 )
 

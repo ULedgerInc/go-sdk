@@ -1,4 +1,4 @@
-module github.com/ULedgerInc/golang-sdk
+module github.com/ULedgerInc/go-sdk
 
 go 1.24.1
 

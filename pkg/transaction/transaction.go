@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ULedgerInc/golang-sdk/pkg/crypto"
+	"github.com/ULedgerInc/go-sdk/pkg/crypto"
 	"github.com/consensys/gnark-crypto/accumulator/merkletree"
 	"github.com/consensys/gnark-crypto/ecc"
 )

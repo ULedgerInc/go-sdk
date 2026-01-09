@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ULedgerInc/golang-sdk/pkg/crypto"
-	"github.com/ULedgerInc/golang-sdk/pkg/transaction"
-	"github.com/ULedgerInc/golang-sdk/pkg/wallet"
+	"github.com/ULedgerInc/go-sdk/pkg/crypto"
+	"github.com/ULedgerInc/go-sdk/pkg/transaction"
+	"github.com/ULedgerInc/go-sdk/pkg/wallet"
 )
 
 func main() {
