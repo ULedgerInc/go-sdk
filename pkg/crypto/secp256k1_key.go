@@ -196,15 +196,6 @@ func (key *Secp256k1Key) GetPublicKey() *ecdsa.PublicKey {
 	return key.publicKey
 }
 
-func (key *Secp256k1Key) GetCommitmentIntHash(commitment []byte) *big.Int {
-	dataToHash := make([]byte, len(commitment))
-	copy(dataToHash, commitment[:])
-	hasher := GetHasherByType(KeyTypeSecp256k1)
-	hasher.Write(dataToHash[:])
-	hramBin := hasher.Sum(nil)
-	return ecdsa.HashToInt(hramBin)
-}
-
 func (key *Secp256k1Key) GetRSFromSignature(signature []byte) (*big.Int, *big.Int, error) {
 	if len(signature) != 64 {
 		return nil, nil, fmt.Errorf("expected 64 bytes, got %d", len(signature))
