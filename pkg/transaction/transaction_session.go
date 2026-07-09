@@ -16,6 +16,7 @@ type UL_TransactionSession struct {
 	nodeEndpoint string
 	suggestor    string
 	wallet       wallet.UL_Wallet
+	httpClient   *http.Client
 }
 
 type chainInfo struct {
@@ -98,6 +99,7 @@ func NewUL_TransactionSession(nodeEndpoint string, wallet wallet.UL_Wallet) (UL_
 		nodeEndpoint: nodeEndpoint,
 		suggestor:    nodeId,
 		wallet:       wallet,
+		httpClient:   httpClient,
 	}, nil
 }
 
@@ -114,32 +116,7 @@ func (session *UL_TransactionSession) GenerateTransaction(input ULTransactionInp
 	}
 	input.KeyType = session.wallet.GetKey().GetType()
 
-	hasher := crypto.GetHasherByType(input.KeyType)
-
-	var commitment []byte
-	var err error
-	// If the transaction is a deploy, we just need to hash the payload with SHA3-512 and sign it
-	if input.PayloadType == DEPLOY_SMART_CONTRACT.String() || input.PayloadType == UPGRADE_SMART_CONTRACT.String() ||
-		input.PayloadType == TX_CREATE_WALLET.String() || input.PayloadType == TX_ALTER_WALLET.String() {
-		fmt.Println("Generating commitment for deploy or create wallet transaction")
-		commitment, err = input.GetUnboundCommitment(hasher)
-		if err != nil {
-			return ULTransaction{}, err
-		}
-		input.PayloadRoot = crypto.BytesToHex(commitment)
-	} else {
-		signatureCommitment, err := input.GetSignatureCommitment(hasher, true)
-		if err != nil {
-			return ULTransaction{}, err
-		}
-		commitment, err = input.HashSignatureCommitment(hasher, signatureCommitment)
-		if err != nil {
-			return ULTransaction{}, err
-		}
-
-		// Set the payload root
-		input.PayloadRoot = crypto.BytesToHex(signatureCommitment.PayloadRoot)
-	}
+	commitment := input.GetSignatureDigest()
 
 	// Sign the commitment
 	signature, err := session.wallet.GetKey().SignData(commitment)
@@ -148,9 +125,6 @@ func (session *UL_TransactionSession) GenerateTransaction(input ULTransactionInp
 	}
 
 	input.SenderSignature = crypto.BytesToHex(signature)
-
-	// HTTP Request to the Node
-	httpClient := &http.Client{}
 
 	// Parse the input to JSON
 	jsonInput, err := json.Marshal(input)
@@ -164,7 +138,7 @@ func (session *UL_TransactionSession) GenerateTransaction(input ULTransactionInp
 	}
 
 	// Perform the request
-	resp, err := httpClient.Do(req)
+	resp, err := session.httpClient.Do(req)
 	if err != nil {
 		return ULTransaction{}, err
 	}
@@ -178,6 +152,33 @@ func (session *UL_TransactionSession) GenerateTransaction(input ULTransactionInp
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		if resp.StatusCode == http.StatusTooManyRequests {
+			// Try again with exponential backoff
+			retries := 5
+			backoff := time.Second
+			for i := 0; i < retries; i++ {
+				time.Sleep(backoff)
+				resp, err = session.httpClient.Do(req)
+				if err != nil {
+					return ULTransaction{}, err
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+					body, err = io.ReadAll(resp.Body)
+					if err != nil {
+						return ULTransaction{}, err
+					}
+					break
+				}
+
+				backoff *= 2
+			}
+
+			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+				return ULTransaction{}, fmt.Errorf("server returned status code: %d after %d retries, message:%s", resp.StatusCode, retries, body)
+			}
+		}
 		return ULTransaction{}, fmt.Errorf("server returned unexpected status code: %d, message:%s", resp.StatusCode, body)
 	}
 

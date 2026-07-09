@@ -2,19 +2,15 @@ package transaction
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"hash"
-	"math"
-	"math/big"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/ULedgerInc/go-sdk/pkg/crypto"
-	"github.com/consensys/gnark-crypto/accumulator/merkletree"
-	"github.com/consensys/gnark-crypto/ecc"
+	"golang.org/x/crypto/sha3"
 )
 
 // ===================
@@ -25,13 +21,6 @@ const (
 	SEPARATOR           = "|"
 	TIMESTAMP_SIZE      = 8 // Golang uses 64 bits for timestamps in the Unix Format
 	TRANSACTION_VERSION = "2.0.0"
-	CHUNK_SIZE          = 16
-	DEPTH               = 6
-)
-
-var (
-	ECDSA_CURVE = ecc.BN254.ScalarField()
-	BLS_CURVE   = ecc.BW6_761.ScalarField()
 )
 
 type ErrParsingTransactionStatus struct {
@@ -40,6 +29,54 @@ type ErrParsingTransactionStatus struct {
 
 func (e *ErrParsingTransactionStatus) Error() string {
 	return fmt.Sprintf("invalid transaction status, %s", e.Msg)
+}
+
+type EntityType string
+
+const (
+	EntityTypeOrganization EntityType = "ORGANIZATION"
+	EntityTypeDepartment   EntityType = "DEPARTMENT"
+	EntityTypePersonal     EntityType = "PERSONAL"
+	EntityTypeService      EntityType = "SERVICE"
+	EntityTypeDevice       EntityType = "DEVICE"
+	EntityTypeAgent        EntityType = "AGENT"
+)
+
+// Entity name rules, mirrored from the node so an invalid name fails fast
+// client-side instead of being silently dropped on-chain. The node normalizes
+// the name (lowercase + trim) before validating, so "Acme Org" normalizes to
+// "acme org" and is rejected for the internal space; capitals alone are fine.
+const (
+	MinEntityNameLength = 3
+	MaxEntityNameLength = 64
+)
+
+var entityNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$`)
+
+// NormalizeEntityName lowercases and trims the name, matching the node's
+// normalization before storage and validation.
+func NormalizeEntityName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// ValidateEntityName reports whether name (after normalization) is a legal
+// entity name: 3-64 chars of lowercase alphanumerics and hyphens, starting and
+// ending with an alphanumeric. It does not check chain-wide uniqueness, which
+// only the node can enforce.
+func ValidateEntityName(name string) bool {
+	normalized := NormalizeEntityName(name)
+	if len(normalized) < MinEntityNameLength || len(normalized) > MaxEntityNameLength {
+		return false
+	}
+	return entityNameRegex.MatchString(normalized)
+}
+
+type EntityPermission struct {
+	ManageWallets     bool `json:"manageWallets"`
+	ManageChildren    bool `json:"manageChildren"`
+	ManageAccessList  bool `json:"manageAccessList"`
+	ManageMetadata    bool `json:"manageMetadata"`
+	TransferOwnership bool `json:"transferOwnership"`
 }
 
 type UL_TransactionStatus int
@@ -108,6 +145,19 @@ const (
 	TRANSFER_MULTI_TOKEN
 	MINT_MULTI_TOKEN
 	CONVERT_TOKEN
+	CREATE_ENTITY
+	ALTER_ENTITY
+	TRANSFER_ENTITY
+	LINK_WALLET_TO_ENTITY
+	UNLINK_WALLET_FROM_ENTITY
+	SET_ENTITY_ACCESS_LIST
+	SET_WALLET_ACCESS_LIST
+
+	CONFIGURE_ENTITY_RECOVERY
+	REQUEST_ENTITY_RECOVERY
+	APPROVE_ENTITY_RECOVERY
+	EXECUTE_ENTITY_RECOVERY
+	CANCEL_ENTITY_RECOVERY
 )
 
 func (tt ULTransactionType) String() string {
@@ -150,6 +200,30 @@ func (tt ULTransactionType) String() string {
 		return "MINT_MULTI_TOKEN"
 	case CONVERT_TOKEN:
 		return "CONVERT_TOKEN"
+	case CREATE_ENTITY:
+		return "CREATE_ENTITY"
+	case ALTER_ENTITY:
+		return "ALTER_ENTITY"
+	case TRANSFER_ENTITY:
+		return "TRANSFER_ENTITY"
+	case LINK_WALLET_TO_ENTITY:
+		return "LINK_WALLET_TO_ENTITY"
+	case UNLINK_WALLET_FROM_ENTITY:
+		return "UNLINK_WALLET_FROM_ENTITY"
+	case SET_ENTITY_ACCESS_LIST:
+		return "SET_ENTITY_ACCESS_LIST"
+	case SET_WALLET_ACCESS_LIST:
+		return "SET_WALLET_ACCESS_LIST"
+	case CONFIGURE_ENTITY_RECOVERY:
+		return "CONFIGURE_ENTITY_RECOVERY"
+	case REQUEST_ENTITY_RECOVERY:
+		return "REQUEST_ENTITY_RECOVERY"
+	case APPROVE_ENTITY_RECOVERY:
+		return "APPROVE_ENTITY_RECOVERY"
+	case EXECUTE_ENTITY_RECOVERY:
+		return "EXECUTE_ENTITY_RECOVERY"
+	case CANCEL_ENTITY_RECOVERY:
+		return "CANCEL_ENTITY_RECOVERY"
 	default:
 		return ""
 	}
@@ -191,6 +265,30 @@ func ParseTransactionType(str string) (ULTransactionType, error) {
 		return MINT_MULTI_TOKEN, nil
 	case CONVERT_TOKEN.String():
 		return CONVERT_TOKEN, nil
+	case CREATE_ENTITY.String():
+		return CREATE_ENTITY, nil
+	case ALTER_ENTITY.String():
+		return ALTER_ENTITY, nil
+	case TRANSFER_ENTITY.String():
+		return TRANSFER_ENTITY, nil
+	case LINK_WALLET_TO_ENTITY.String():
+		return LINK_WALLET_TO_ENTITY, nil
+	case UNLINK_WALLET_FROM_ENTITY.String():
+		return UNLINK_WALLET_FROM_ENTITY, nil
+	case SET_ENTITY_ACCESS_LIST.String():
+		return SET_ENTITY_ACCESS_LIST, nil
+	case SET_WALLET_ACCESS_LIST.String():
+		return SET_WALLET_ACCESS_LIST, nil
+	case CONFIGURE_ENTITY_RECOVERY.String():
+		return CONFIGURE_ENTITY_RECOVERY, nil
+	case REQUEST_ENTITY_RECOVERY.String():
+		return REQUEST_ENTITY_RECOVERY, nil
+	case APPROVE_ENTITY_RECOVERY.String():
+		return APPROVE_ENTITY_RECOVERY, nil
+	case EXECUTE_ENTITY_RECOVERY.String():
+		return EXECUTE_ENTITY_RECOVERY, nil
+	case CANCEL_ENTITY_RECOVERY.String():
+		return CANCEL_ENTITY_RECOVERY, nil
 	default:
 		return INVALID_TX_TYPE, &ErrParsingTransactionType{Msg: str}
 	}
@@ -288,125 +386,34 @@ type Transaction interface {
 	SetTransactionWeight()
 }
 
-type TransactionCommitment struct {
-	BlockchainIdHigh []byte
-	BlockchainIdLow  []byte
-	FromHigh         []byte
-	FromLow          []byte
-	ToHigh           []byte
-	ToLow            []byte
-	PayloadRoot      []byte
-	Timestamp        uint64
-	SuggestorHigh    []byte
-	SuggestorLow     []byte
-	ProofElements    [][]byte
-	ChunkIndex       int64
-	NumLeaves        uint64
-	ChunkSize        int
-	ProofChunk       []byte
-	Depth            int
-}
+// GetSignatureDigest is the message a wallet signs: SHA3-512 over a canonical
+// length-prefixed serialization of the sender-controlled fields. It must match
+// the node's core.ULTransactionInput.GetSignatureDigest byte for byte.
+func (t *ULTransactionInput) GetSignatureDigest() []byte {
+	buf := bytes.Buffer{}
 
-// Helper to hash the data! Using SHA256
-func splitHash32(data string) ([]byte, []byte, error) {
-	hash := sha256.Sum256([]byte(data))
-	if len(hash) != 32 {
-		return nil, nil, fmt.Errorf("expected 32 byte hash, got %d", len(hash))
-	}
-	return hash[:16], hash[16:], nil
-}
-
-func (t *ULTransactionInput) GetSignatureCommitment(hasher hash.Hash, computeRoot bool) (TransactionCommitment, error) {
-	// Split BlockchainId hash
-	blockchainIdHigh, blockchainIdLow, err := splitHash32(t.BlockchainId)
-	if err != nil {
-		return TransactionCommitment{}, err
+	writeField := func(s string) {
+		var lenBuf [4]byte
+		binary.BigEndian.PutUint32(lenBuf[:], uint32(len(s)))
+		buf.WriteByte('|')
+		buf.Write(lenBuf[:])
+		buf.WriteByte('|')
+		buf.WriteString(s)
 	}
 
-	// Split From address hash
-	fromHigh, fromLow, err := splitHash32(t.From)
-	if err != nil {
-		return TransactionCommitment{}, err
-	}
+	writeField(t.BlockchainId)
+	writeField(t.From)
+	writeField(t.To)
+	writeField(t.Payload)
+	writeField(t.Suggestor)
 
-	// Split To address hash
-	toHigh, toLow, err := splitHash32(t.To)
-	if err != nil {
-		return TransactionCommitment{}, err
-	}
+	var ts [8]byte
+	binary.BigEndian.PutUint64(ts[:], uint64(t.SenderTimestamp.Unix()))
+	buf.WriteByte('|')
+	buf.Write(ts[:])
 
-	// Split Suggestor hash
-	suggestorHigh, suggestorLow, err := splitHash32(t.Suggestor)
-	if err != nil {
-		return TransactionCommitment{}, err
-	}
-
-	var field *big.Int
-
-	switch t.KeyType {
-	case crypto.KeyTypeBLS12377:
-		field = BLS_CURVE
-	default:
-		field = ECDSA_CURVE
-	}
-
-	payloadRoot, proofElements, proofChunk, numLeaves, err := GenerateMerkleTreeWithHardBound([]byte(t.Payload), field, CHUNK_SIZE, DEPTH, hasher, uint64(0))
-	if err != nil {
-		return TransactionCommitment{}, err
-	}
-
-	return TransactionCommitment{
-		BlockchainIdHigh: blockchainIdHigh,
-		BlockchainIdLow:  blockchainIdLow,
-		FromHigh:         fromHigh,
-		FromLow:          fromLow,
-		ToHigh:           toHigh,
-		ToLow:            toLow,
-		Timestamp:        uint64(t.SenderTimestamp.Unix()),
-		SuggestorHigh:    suggestorHigh,
-		SuggestorLow:     suggestorLow,
-		ChunkIndex:       0, // Merkle Root
-		ChunkSize:        CHUNK_SIZE,
-		Depth:            DEPTH,
-		PayloadRoot:      payloadRoot,
-		ProofElements:    proofElements,
-		NumLeaves:        numLeaves,
-		ProofChunk:       proofChunk,
-	}, nil
-}
-
-func (t *ULTransactionInput) GetUnboundCommitment(hasher hash.Hash) ([]byte, error) {
-	var field *big.Int
-
-	switch t.KeyType {
-	case crypto.KeyTypeBLS12377:
-		field = BLS_CURVE
-	default:
-		field = ECDSA_CURVE
-	}
-
-	payloadRoot, _, _, _, _, err := GenerateMerkleTree([]byte(t.Payload), field, CHUNK_SIZE, hasher, uint64(0))
-	if err != nil {
-		return nil, err
-	}
-
-	return payloadRoot, nil
-}
-
-func (t *ULTransactionInput) HashSignatureCommitment(hasher hash.Hash, commitment TransactionCommitment) ([]byte, error) {
-	hasher.Reset()
-	hasher.Write(commitment.BlockchainIdHigh)
-	hasher.Write(commitment.BlockchainIdLow)
-	hasher.Write(commitment.FromHigh)
-	hasher.Write(commitment.FromLow)
-	hasher.Write(commitment.ToHigh)
-	hasher.Write(commitment.ToLow)
-	hasher.Write(commitment.PayloadRoot)
-	binary.Write(hasher, binary.BigEndian, commitment.Timestamp)
-	hasher.Write(commitment.SuggestorHigh)
-	hasher.Write(commitment.SuggestorLow)
-
-	return hasher.Sum(nil), nil
+	digest := sha3.Sum512(buf.Bytes())
+	return digest[:]
 }
 
 type ULBlock struct {
@@ -428,7 +435,6 @@ type ULTransactionInput struct {
 	PayloadType     string         `json:"payloadType"`
 	Suggestor       string         `json:"suggestor"`
 	SenderTimestamp time.Time      `json:"senderTimestamp"`
-	PayloadRoot     string         `json:"payloadRoot"`
 	KeyType         crypto.KeyType `json:"keyType"`
 }
 
@@ -442,8 +448,6 @@ type ULTransactionOutput struct {
 	Weight        int         `json:"weight"`
 	Status        string      `json:"status"`
 	Output        string      `json:"output"`
-	Proof         string      `json:"proof"`
-	ProofVersion  string      `json:"proofVersion"`
 }
 
 type ULTransaction struct {
@@ -487,102 +491,6 @@ func TransactionFromBytes(data []byte) (*ULTransaction, error) {
 	}
 
 	return tx, nil
-}
-
-func GenerateMerkleTreeWithHardBound(payload []byte, modulus *big.Int, chunkSize int, depth int, hasher hash.Hash, proofIndex uint64) ([]byte, [][]byte, []byte, uint64, error) {
-	maxSize := chunkSize * (1 << depth) // Maximum size of the payload in bytes
-	if len(payload) > maxSize {
-		return nil, nil, nil, 0, fmt.Errorf("payload is too large, max size is %d bytes, got %d bytes", maxSize, len(payload))
-	}
-
-	modulusSizeBytes := len(modulus.Bytes())
-	var proofChunk []byte
-	var buf bytes.Buffer
-
-	for i := 0; i < (1 << depth); i++ {
-		chunk := make([]byte, chunkSize)
-
-		// Only copy payload data if we haven't reached the end
-		if i*chunkSize < len(payload) {
-			start := i * chunkSize
-			end := start + chunkSize
-			if end > len(payload) {
-				end = len(payload)
-			}
-			chunk = append(chunk, payload[start:end]...)
-			// Padd with zeros to make sure it's a field element!
-			chunk = append(chunk, make([]byte, modulusSizeBytes-len(chunk))...)
-		}
-
-		// Store proof chunk if this is the index we're proving
-		if i == int(proofIndex) {
-			proofChunk = make([]byte, len(chunk))
-			copy(proofChunk, chunk)
-		}
-
-		// Ensure chunk fits in field
-		if len(chunk) < modulusSizeBytes {
-			// Pad with zeros to make it a valid field element
-			chunk = append(chunk, make([]byte, modulusSizeBytes-len(chunk))...)
-		}
-
-		buf.Write(make([]byte, modulusSizeBytes-len(chunk)))
-		buf.Write(chunk)
-	}
-
-	merkleRoot, proofElements, numLeaves, err := merkletree.BuildReaderProof(&buf, hasher, modulusSizeBytes, proofIndex)
-	if err != nil {
-		return nil, nil, nil, 0, err
-	}
-
-	if numLeaves != uint64(1<<depth) {
-		return nil, nil, nil, 0, fmt.Errorf("the number of leaves is not equal to the depth")
-	}
-
-	verified := merkletree.VerifyProof(hasher, merkleRoot, proofElements, proofIndex, numLeaves)
-	if !verified {
-		return nil, nil, nil, 0, fmt.Errorf("the created Merkle Proof is not valid")
-	}
-
-	return merkleRoot, proofElements, proofChunk, numLeaves, nil
-}
-
-func GenerateMerkleTree(payload []byte, modulus *big.Int, chunkSize int, hasher hash.Hash, proofIndex uint64) ([]byte, [][]byte, []byte, uint64, int, error) {
-	modulusSizeBytes := len(modulus.Bytes())
-
-	var proofChunk []byte
-	nrLeaves := (len(payload) + chunkSize - 1) / chunkSize
-
-	var buf bytes.Buffer
-	// Print each chunk as we process it
-	for i := 0; i < nrLeaves; i++ {
-		start := i * chunkSize
-		end := start + chunkSize
-		if end > len(payload) {
-			end = len(payload)
-		}
-		chunk := payload[start:end]
-		paddedChunk := make([]byte, modulusSizeBytes-len(chunk))
-		paddedChunk = append(paddedChunk, chunk...)
-		if i == int(proofIndex) {
-			proofChunk = make([]byte, len(paddedChunk))
-			copy(proofChunk, paddedChunk)
-		}
-		// Fill with zeros to make sure it's a field element!
-		buf.Write(paddedChunk)
-	}
-
-	merkleRoot, proofElements, numLeaves, err := merkletree.BuildReaderProof(&buf, hasher, modulusSizeBytes, proofIndex)
-	if err != nil {
-		return nil, nil, nil, 0, 0, err
-	}
-
-	verified := merkletree.VerifyProof(hasher, merkleRoot, proofElements, proofIndex, numLeaves)
-	if !verified {
-		return nil, nil, nil, 0, 0, fmt.Errorf("the created Merkle Proof is not valid")
-	}
-	treeDepth := int(math.Log2(float64(numLeaves)))
-	return merkleRoot, proofElements, proofChunk, numLeaves, treeDepth, nil
 }
 
 type ContractArgs struct {
@@ -699,3 +607,112 @@ var (
 	ERC721_TOKEN_TYPE  = "ERC721"
 	ERC1155_TOKEN_TYPE = "ERC1155"
 )
+
+type CreateEntityPayload struct {
+	Name       string            `json:"name"`
+	EntityType EntityType        `json:"entityType"`
+	Parent     string            `json:"parent,omitempty"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+}
+
+type AlterEntityPayload struct {
+	EntityAddress string            `json:"entityAddress"`
+	Enabled       *bool             `json:"enabled,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+}
+
+type TransferEntityPayload struct {
+	EntityAddress string `json:"entityAddress"`
+	NewOwner      string `json:"newOwner"`
+}
+
+type LinkWalletPayload struct {
+	EntityAddress string            `json:"entityAddress"`
+	WalletAddress string            `json:"walletAddress"`
+	Role          string            `json:"role"`
+	Permissions   *EntityPermission `json:"permissions,omitempty"`
+}
+
+type UnlinkWalletPayload struct {
+	EntityAddress string `json:"entityAddress"`
+	WalletAddress string `json:"walletAddress"`
+}
+
+type AccessListOperation int
+
+const (
+	AccessListOpInvalid AccessListOperation = iota
+	AccessListOpAddBlacklist
+	AccessListOpRemoveBlacklist
+	AccessListOpAddTrusted
+	AccessListOpRemoveTrusted
+)
+
+func (op AccessListOperation) String() string {
+	switch op {
+	case AccessListOpAddBlacklist:
+		return "ADD_BLACKLIST"
+	case AccessListOpRemoveBlacklist:
+		return "REMOVE_BLACKLIST"
+	case AccessListOpAddTrusted:
+		return "ADD_TRUSTED"
+	case AccessListOpRemoveTrusted:
+		return "REMOVE_TRUSTED"
+	default:
+		return ""
+	}
+}
+
+func ParseAccessListOperation(s string) (AccessListOperation, bool) {
+	switch strings.ToUpper(s) {
+	case "ADD_BLACKLIST":
+		return AccessListOpAddBlacklist, true
+	case "REMOVE_BLACKLIST":
+		return AccessListOpRemoveBlacklist, true
+	case "ADD_TRUSTED":
+		return AccessListOpAddTrusted, true
+	case "REMOVE_TRUSTED":
+		return AccessListOpRemoveTrusted, true
+	default:
+		return AccessListOpInvalid, false
+	}
+}
+
+type SetEntityAccessListPayload struct {
+	EntityAddress string `json:"entityAddress"`
+	Operation     string `json:"operation"`
+	TargetAddress string `json:"targetAddress"`
+}
+
+type SetWalletAccessListPayload struct {
+	Operation     string `json:"operation"`
+	TargetAddress string `json:"targetAddress"`
+}
+
+const (
+	EntityRoleAdmin  = "admin"
+	EntityRoleMember = "member"
+)
+
+type ConfigureEntityRecoveryPayload struct {
+	EntityAddress   string   `json:"entityAddress"`
+	RecoveryWallets []string `json:"recoveryWallets"`
+	Threshold       int      `json:"threshold"`
+}
+
+type RequestEntityRecoveryPayload struct {
+	EntityAddress string `json:"entityAddress"`
+	NewOwner      string `json:"newOwner"`
+}
+
+type ApproveEntityRecoveryPayload struct {
+	RequestId string `json:"requestId"`
+}
+
+type ExecuteEntityRecoveryPayload struct {
+	RequestId string `json:"requestId"`
+}
+
+type CancelEntityRecoveryPayload struct {
+	RequestId string `json:"requestId"`
+}

@@ -1,15 +1,11 @@
 package crypto
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"hash"
 	"strings"
-
-	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
-	mimc_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
-	fr_bw6_761 "github.com/consensys/gnark-crypto/ecc/bw6-761/fr"
-	mimc_bw6_761 "github.com/consensys/gnark-crypto/ecc/bw6-761/fr/mimc"
 )
 
 type KeyType int
@@ -104,13 +100,8 @@ func GetKeyByType(keyType KeyType, hasher hash.Hash) (ULKey, error) {
 	}
 }
 
+// GetHasherByType returns the hasher wallet keys sign with; it must match the
+// node's wallet-key hasher (crypto/sha256).
 func GetHasherByType(keyType KeyType) hash.Hash {
-	switch keyType {
-	case KeyTypeSecp256k1:
-		return mimc_bn254.NewMiMC(mimc_bn254.WithByteOrder(fr_bn254.BigEndian))
-	case KeyTypeBLS12377:
-		return mimc_bw6_761.NewMiMC(mimc_bw6_761.WithByteOrder(fr_bw6_761.BigEndian))
-	default:
-		return mimc_bn254.NewMiMC(mimc_bn254.WithByteOrder(fr_bn254.BigEndian))
-	}
+	return sha256.New()
 }

@@ -16,6 +16,7 @@ type UL_Wallet struct {
 	Address    string                       `json:"address"`
 	Enabled    bool                         `json:"enabled"`
 	Parent     string                       `json:"parent"`
+	Entity     string                       `json:"entity"`
 	AuthGroups map[string]UL_AuthPermission `json:"authGroups"`
 	key        crypto.ULKey                 `json:"-"`
 }
@@ -86,7 +87,6 @@ func FromJson(data string, passphrase string) (*UL_Wallet, error) {
 }
 
 func GetWalletFromHex(publicKeyHex, privateKeyHex string, keyType crypto.KeyType) (UL_Wallet, error) {
-	// By default, the hasher is MimcHash on the BN254 curve
 	hasher := crypto.GetHasherByType(keyType)
 	key, err := crypto.GetKeyByType(keyType, hasher)
 	if err != nil {
