@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,8 +40,16 @@ type healthInfo struct {
 }
 
 func NewUL_TransactionSession(nodeEndpoint string, wallet wallet.UL_Wallet) (UL_TransactionSession, error) {
+	return NewUL_TransactionSessionWithTLS(nodeEndpoint, wallet, false)
+}
+
+func NewUL_TransactionSessionWithTLS(nodeEndpoint string, wallet wallet.UL_Wallet, insecureSkipVerify bool) (UL_TransactionSession, error) {
 	// Fetch the Node Metadata
-	httpClient := &http.Client{}
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
+		},
+	}
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/health", nodeEndpoint), nil)
 	// Read the response
 	resp, err := httpClient.Do(req)
@@ -189,4 +198,154 @@ func (session *UL_TransactionSession) GenerateTransaction(input ULTransactionInp
 	}
 
 	return transaction, nil
+}
+
+func (session *UL_TransactionSession) ResolveDID(did string) (DIDResolutionResult, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/did/%s", session.nodeEndpoint, did), nil)
+	if err != nil {
+		return DIDResolutionResult{}, err
+	}
+
+	resp, err := session.httpClient.Do(req)
+	if err != nil {
+		return DIDResolutionResult{}, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return DIDResolutionResult{}, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return DIDResolutionResult{}, fmt.Errorf("server returned unexpected status code: %d, message:%s", resp.StatusCode, body)
+	}
+
+	result := DIDResolutionResult{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return DIDResolutionResult{}, err
+	}
+
+	return result, nil
+}
+
+func (session *UL_TransactionSession) ResolveDIDSigned(did string) (SignedResolutionEnvelope, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/did/%s?signed=1", session.nodeEndpoint, did), nil)
+	if err != nil {
+		return SignedResolutionEnvelope{}, err
+	}
+
+	resp, err := session.httpClient.Do(req)
+	if err != nil {
+		return SignedResolutionEnvelope{}, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return SignedResolutionEnvelope{}, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return SignedResolutionEnvelope{}, fmt.Errorf("server returned unexpected status code: %d, message:%s", resp.StatusCode, body)
+	}
+
+	result := SignedResolutionEnvelope{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return SignedResolutionEnvelope{}, err
+	}
+
+	return result, nil
+}
+
+func (session *UL_TransactionSession) ResolveDIDChain(did string) ([]DIDResolutionResult, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/did/%s/chain", session.nodeEndpoint, did), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := session.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned unexpected status code: %d, message:%s", resp.StatusCode, body)
+	}
+
+	results := make([]DIDResolutionResult, 0)
+	if err := json.Unmarshal(body, &results); err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+func (session *UL_TransactionSession) VerifyIdentityClaim(claim IdentityClaim) (VerifyResult, error) {
+	jsonInput, err := json.Marshal(claim)
+	if err != nil {
+		return VerifyResult{}, err
+	}
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/identity/verify", session.nodeEndpoint), bytes.NewBuffer(jsonInput))
+	if err != nil {
+		return VerifyResult{}, err
+	}
+
+	resp, err := session.httpClient.Do(req)
+	if err != nil {
+		return VerifyResult{}, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return VerifyResult{}, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return VerifyResult{}, fmt.Errorf("server returned unexpected status code: %d, message:%s", resp.StatusCode, body)
+	}
+
+	result := VerifyResult{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return VerifyResult{}, err
+	}
+
+	return result, nil
+}
+
+func (session *UL_TransactionSession) GetTransactionProof(blockchainId, txId string) (TxInclusionProofPackage, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/blockchains/%s/transactions/%s/proof", session.nodeEndpoint, blockchainId, txId), nil)
+	if err != nil {
+		return TxInclusionProofPackage{}, err
+	}
+
+	resp, err := session.httpClient.Do(req)
+	if err != nil {
+		return TxInclusionProofPackage{}, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return TxInclusionProofPackage{}, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return TxInclusionProofPackage{}, fmt.Errorf("server returned unexpected status code: %d, message:%s", resp.StatusCode, body)
+	}
+
+	pkg := TxInclusionProofPackage{}
+	if err := json.Unmarshal(body, &pkg); err != nil {
+		return TxInclusionProofPackage{}, err
+	}
+
+	return pkg, nil
 }
