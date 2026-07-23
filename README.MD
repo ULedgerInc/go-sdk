@@ -41,3 +41,14 @@ It is perfectly legal to author a transaction that results in no change to a wal
 ```bash
 go run examples/alter_wallets/main.go --target=fd97f868cf2bb29caa4703c79113ca0deb8f4e3110102e378d9d171254eec2aa --blockchain=08c28f29a62819120958984b761ddf8ccb45951612731409873994958fd150a2 --node=https://node.example.com
 ```
+
+### Running the identity lifecycle
+
+This runs the ULedger Identity Services lifecycle end-to-end: entity creation, DID resolution, metadata updates, ownership transfer, recovery, and (optionally) Verifiable Credential issuance and verification.
+Copy `examples/identity/identity.config.example.json`, point it at your node and wallets, then:
+
+```bash
+go run examples/identity/main.go --config=examples/identity/identity.config.json
+```
+
+A JSON report of every step is written to the configured `outputDir`.
