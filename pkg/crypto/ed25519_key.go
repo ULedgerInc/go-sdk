@@ -70,6 +70,10 @@ func (key *ED25519Key) GeneratePublicKeyFromHex(compressed bool, hex string) err
 	if err != nil {
 		return fmt.Errorf("unable to decode public key, %w", err)
 	}
+	// ed25519.Verify panics on a key of the wrong length
+	if len(publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("invalid ed25519 public key length %d", len(publicKey))
+	}
 	key.publicKey = publicKey
 	return nil
 }
@@ -82,6 +86,10 @@ func (key *ED25519Key) GeneratePrivateKeyFromHex(hex string) error {
 	privateKey, err := HexToBytes(hex)
 	if err != nil {
 		return fmt.Errorf("unable to decode private key, %w", err)
+	}
+	// ed25519.Sign panics on a key of the wrong length
+	if len(privateKey) != ed25519.PrivateKeySize {
+		return fmt.Errorf("invalid ed25519 private key length %d", len(privateKey))
 	}
 	key.privateKey = privateKey
 	return nil
