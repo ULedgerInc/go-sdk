@@ -27,13 +27,13 @@ func TestNewTransactionSession(t *testing.T) {
 	// Make sure the node is running!
 	testNodeEndpoint := "http://localhost:8080"
 
-	transactionSession, err := NewUL_TransactionSession(testNodeEndpoint, wallet)
+	transactionSession, err := NewUL_TransactionSession(t.Context(), testNodeEndpoint, wallet, SessionOptions{})
 	if err != nil {
 		t.Errorf("NewUL_TransactionSession() error = %v", err)
 		return
 	}
 
-	transaction, err := transactionSession.GenerateTransaction(input)
+	transaction, err := transactionSession.GenerateTransaction(t.Context(), input)
 	if err != nil {
 		t.Errorf("GenerateTransaction() error = %v", err)
 	}

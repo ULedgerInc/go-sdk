@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -60,7 +61,7 @@ func newHTTPChainClient(endpoint string, insecureSkipVerify bool) *httpChainClie
 func (c *httpChainClient) sessionFor(signer *wallet.UL_Wallet) (*transaction.UL_TransactionSession, error) {
 	sess, ok := c.sessions[signer.Address]
 	if !ok {
-		s, err := transaction.NewUL_TransactionSessionWithTLS(c.endpoint, *signer, c.insecureSkipVerify)
+		s, err := transaction.NewUL_TransactionSession(context.Background(), c.endpoint, *signer, transaction.SessionOptions{InsecureSkipVerify: c.insecureSkipVerify})
 		if err != nil {
 			return nil, fmt.Errorf("creating session for %s: %w", signer.Address, err)
 		}
@@ -75,7 +76,7 @@ func (c *httpChainClient) Submit(signer *wallet.UL_Wallet, input transaction.ULT
 	if err != nil {
 		return transaction.ULTransaction{}, err
 	}
-	return sess.GenerateTransaction(input)
+	return sess.GenerateTransaction(context.Background(), input)
 }
 
 func (c *httpChainClient) ResolveDID(signer *wallet.UL_Wallet, did string) (transaction.DIDResolutionResult, error) {
