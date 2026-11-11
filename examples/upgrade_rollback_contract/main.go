@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -67,13 +68,13 @@ func main() {
 		To:           contractAddress,
 	}
 
-	session, err := transaction.NewUL_TransactionSession(nodeEndpoint, wallet)
+	session, err := transaction.NewUL_TransactionSession(context.Background(), nodeEndpoint, wallet, transaction.SessionOptions{})
 	if err != nil {
 		fmt.Printf("NewUL_TransactionSession() error = %v\n", err)
 		return
 	}
 
-	transaction, err := session.GenerateTransaction(input)
+	transaction, err := session.GenerateTransaction(context.Background(), input)
 	if err != nil {
 		fmt.Printf("GenerateTransaction() error = %v\n", err)
 		return
