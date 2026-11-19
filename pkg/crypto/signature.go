@@ -1,8 +1,10 @@
 package crypto
 
-// IsSignatureValid checks a signature over content using a hex public key,
-// always treated as compressed.
-func IsSignatureValid(publicKey string, content []byte, signature []byte, keyType KeyType) (bool, error) {
+// IsSignatureValid mirrors the node's internal/util.IsSignatureValid: it
+// reconstructs a verifying key of the given type from a hex-encoded public
+// key and checks the signature over content under domain. publicKey is
+// always treated as compressed=true, matching the node's own call site.
+func IsSignatureValid(domain SigningDomain, publicKey string, content []byte, signature []byte, keyType KeyType) (bool, error) {
 	key, err := GetKeyByType(keyType, GetHasherByType(keyType))
 	if err != nil {
 		return false, err
@@ -10,5 +12,5 @@ func IsSignatureValid(publicKey string, content []byte, signature []byte, keyTyp
 	if err := key.GeneratePublicKeyFromHex(true, publicKey); err != nil {
 		return false, err
 	}
-	return key.VerifySignature(content, signature)
+	return key.VerifyWithContext(domain, content, signature)
 }

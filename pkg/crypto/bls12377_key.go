@@ -133,6 +133,13 @@ func HashBLS12377Message(message []byte) (bls12377.G2Affine, error) {
 }
 
 func (key *BLS12377Key) SignData(message []byte) ([]byte, error) {
+	if err := rejectDomainTagged(message); err != nil {
+		return nil, err
+	}
+	return key.signRaw(message)
+}
+
+func (key *BLS12377Key) signRaw(message []byte) ([]byte, error) {
 	if key.privateKey == (BLS12377PrivateKey{}) {
 		return nil, fmt.Errorf("private key is not set")
 	}
@@ -151,14 +158,40 @@ func (key *BLS12377Key) SignData(message []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid signature")
 	}
 
-	return sig.Bytes(), nil
+	signature := sig.Bytes()
+	if ok, err := key.verifyRaw(message, signature); err != nil || !ok {
+		return nil, errSignatureSelfCheck
+	}
+	return signature, nil
+}
 
+func (key *BLS12377Key) SignWithContext(domain SigningDomain, data []byte) ([]byte, error) {
+	msg, err := DomainSeparatedMessage(domain, data)
+	if err != nil {
+		return nil, err
+	}
+	return key.signRaw(msg)
+}
+
+func (key *BLS12377Key) VerifyWithContext(domain SigningDomain, data, signature []byte) (bool, error) {
+	msg, err := DomainSeparatedMessage(domain, data)
+	if err != nil {
+		return false, err
+	}
+	return key.verifyRaw(msg, signature)
+}
+
+func (key *BLS12377Key) VerifySignature(message []byte, signature []byte) (bool, error) {
+	if err := rejectDomainTagged(message); err != nil {
+		return false, err
+	}
+	return key.verifyRaw(message, signature)
 }
 
 // The validation is defined as:
 //
 //	e(G1, sig.S) ?= e(pk, G2)
-func (key *BLS12377Key) VerifySignature(message []byte, signature []byte) (bool, error) {
+func (key *BLS12377Key) verifyRaw(message []byte, signature []byte) (bool, error) {
 
 	if key.publicKey.A.IsInfinity() {
 		return false, fmt.Errorf("public key is not set")
@@ -224,6 +257,9 @@ func (key *BLS12377Key) GeneratePrivateKeyFromHex(hex string) error {
 	_, err = key.privateKey.SetBytes(hexBytes)
 	if err != nil {
 		return fmt.Errorf("unable to set private key, %w", err)
+	}
+	if key.publicKey.A.IsInfinity() {
+		key.publicKey = key.privateKey.PublicKey
 	}
 
 	return nil

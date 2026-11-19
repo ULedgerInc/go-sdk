@@ -15,16 +15,21 @@ type VerifyOptions struct {
 	KeyType            crypto.KeyType
 	SignerPublicKeyHex string
 	// ProofPackage, if set, cross-checks the issuer key against the proof
-	// block's proposer key (fails closed on multi-node councils).
+	// block's proposer key, so on multi-node councils it only passes when
+	// the referenced block was proposed by the issuing node; it fails closed
+	// otherwise.
 	ProofPackage  *transaction.TxInclusionProofPackage
 	StatusListJWS string
 	Now           time.Time
 }
 
-// VerifyCredentialJWT verifies a ULedger credential JWT offline: tamper-evident
-// under operator honesty. The signer key is pinned by the caller or self-sourced
-// from the JWS header; a ProofPackage additionally cross-checks the issuer key
-// against the block signer (assumes the package was already audit-verified).
+// VerifyCredentialJWT verifies a ULedger verifiable credential JWT entirely
+// offline: tamper-evident under operator honesty. The signer key is either
+// pinned by the caller or self-sourced from the JWS header; passing a
+// ProofPackage additionally cross-checks the issuer key against the block
+// signer the proof was served with. The cross-check assumes the package was
+// already validated with audit.VerifyTxInclusionProof; an unverified package
+// proves nothing about the issuer.
 func VerifyCredentialJWT(token string, opts VerifyOptions) (*CredentialPayload, error) {
 	header, _, _, _, err := ParseCompactJWS(token)
 	if err != nil {

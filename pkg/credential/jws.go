@@ -65,8 +65,8 @@ func ParseCompactJWS(token string) (Header, []byte, []byte, []byte, error) {
 	return header, payloadJSON, sig, []byte(parts[0] + "." + parts[1]), nil
 }
 
-// VerifyJWS verifies a compact JWS offline against a known signer key:
-// tamper-evident under operator honesty, not a trust root by itself.
+// VerifyJWS verifies a compact JWS entirely offline against a known signer
+// key: tamper-evident under operator honesty, not a trust root by itself.
 func VerifyJWS(token string, kt crypto.KeyType, publicKeyHex string) ([]byte, error) {
 	expectedAlg, err := AlgForKeyType(kt)
 	if err != nil {
@@ -82,7 +82,14 @@ func VerifyJWS(token string, kt crypto.KeyType, publicKeyHex string) ([]byte, er
 	if header.Typ != TypVCJWT {
 		return nil, fmt.Errorf("typ mismatch: token %q, expected %q", header.Typ, TypVCJWT)
 	}
-	ok, err := crypto.IsSignatureValid(publicKeyHex, signingInput, sig, kt)
+	key, err := crypto.GetKeyByType(kt, crypto.GetHasherByType(kt))
+	if err != nil {
+		return nil, err
+	}
+	if err := key.GeneratePublicKeyFromHex(true, publicKeyHex); err != nil {
+		return nil, err
+	}
+	ok, err := key.VerifySignature(signingInput, sig)
 	if err != nil {
 		return nil, err
 	}

@@ -80,8 +80,12 @@ type ULKey interface {
 	GenerateKeyFromSeed(seed []byte) error
 	RegenerateKeyFromSeed(seed []byte, salt []byte) error
 	// Cryptographic operations
+	// SignData and VerifySignature use the empty context and are reserved for
+	// JWS; every protocol message signs and verifies under its SigningDomain.
 	SignData(data []byte) ([]byte, error)
 	VerifySignature(message []byte, signature []byte) (bool, error)
+	SignWithContext(domain SigningDomain, data []byte) ([]byte, error)
+	VerifyWithContext(domain SigningDomain, data, signature []byte) (bool, error)
 	GetType() KeyType
 }
 
