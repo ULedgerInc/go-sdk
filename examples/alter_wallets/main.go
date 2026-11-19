@@ -207,12 +207,12 @@ func main() {
 					PayloadType:  transaction.TX_ALTER_WALLET.String(),
 				}
 
-				session, err := transaction.NewUL_TransactionSession(nodeAddress, *w)
+				session, err := transaction.NewUL_TransactionSession(context.Background(), nodeAddress, *w, transaction.SessionOptions{})
 				if err != nil {
 					return fmt.Errorf("error creating transaction session: %w", err)
 				}
 
-				transaction, err := session.GenerateTransaction(input)
+				transaction, err := session.GenerateTransaction(context.Background(), input)
 				if err != nil {
 					return fmt.Errorf("error generating transaction: %w", err)
 				}

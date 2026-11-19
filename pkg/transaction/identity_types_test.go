@@ -70,7 +70,7 @@ func TestResolveDIDSigned(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	session, err := NewUL_TransactionSession(srv.URL, wallet.UL_Wallet{})
+	session, err := NewUL_TransactionSession(t.Context(), srv.URL, wallet.UL_Wallet{}, SessionOptions{})
 	if err != nil {
 		t.Fatalf("NewUL_TransactionSession: %v", err)
 	}
