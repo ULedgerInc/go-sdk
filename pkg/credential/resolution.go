@@ -18,10 +18,14 @@ func resolutionSigningInput(freshnessJSON []byte, payloadB64 string) []byte {
 	return input
 }
 
-// VerifySignedResolution verifies an envelope offline. Without a pinned key it
-// self-sources the signer from env.Signer.PublicKey, so callers must pin or
-// cross-check that key out of band (e.g. against an audit-verified block signer):
-// tamper-evident under operator honesty, not a trust root by itself.
+// VerifySignedResolution verifies a SignedResolutionEnvelope entirely
+// offline, self-sourcing the signer key carried in the envelope: it is
+// tamper-evident under operator honesty, not an independent trust root.
+// Without a pinned key the envelope self-sources its signer, so the caller
+// must pin or cross-check env.Signer.PublicKey out of band, for example
+// against the block-signer key from an audit-verified tx inclusion proof.
+// Passing a non-empty pinnedSignerKey requires env.Signer.PublicKey to match
+// it before the signature is even checked.
 func VerifySignedResolution(env transaction.SignedResolutionEnvelope, expectedChainId string, pinnedSignerKey ...string) ([]byte, error) {
 	if len(pinnedSignerKey) > 0 && pinnedSignerKey[0] != "" && env.Signer.PublicKey != pinnedSignerKey[0] {
 		return nil, fmt.Errorf("signer key does not match pinned key")
@@ -34,7 +38,7 @@ func VerifySignedResolution(env transaction.SignedResolutionEnvelope, expectedCh
 	if err != nil {
 		return nil, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	ok, err := crypto.IsSignatureValid(env.Signer.PublicKey, resolutionSigningInput(freshnessJSON, env.Payload), sig, env.Signer.KeyType)
+	ok, err := crypto.IsSignatureValid(crypto.DomainDIDResolution, env.Signer.PublicKey, resolutionSigningInput(freshnessJSON, env.Payload), sig, env.Signer.KeyType)
 	if err != nil {
 		return nil, err
 	}

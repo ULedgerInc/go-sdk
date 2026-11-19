@@ -8,9 +8,13 @@ import (
 	"github.com/ULedgerInc/go-sdk/pkg/transaction"
 )
 
-// VerifyTxInclusionProof checks, entirely offline, that a served proof package
-// covers expectedTxId in a block of expectedBlockchainId whose merkle root,
-// block hash, and node signature all verify under the block's hashing strategy.
+// VerifyTxInclusionProof mirrors node's internal/audit.VerifyTxInclusionProof:
+// given a proof package served by GetTransactionProof, it checks, entirely
+// offline, that the proof covers expectedTxId, that the block belongs to
+// expectedBlockchainId, that the inclusion proof binds to the block's
+// declared merkle root, that the merkle root and block hash bindings match
+// the block's declared hashing strategy, and that the block's node signature
+// verifies against the signer key embedded in InstanceId.
 func VerifyTxInclusionProof(pkg *transaction.TxInclusionProofPackage, expectedTxId string, keyType crypto.KeyType, expectedBlockchainId string) error {
 	if pkg == nil || pkg.Proof == nil || pkg.Block == nil {
 		return fmt.Errorf("incomplete proof package")
@@ -61,7 +65,7 @@ func VerifyTxInclusionProof(pkg *transaction.TxInclusionProofPackage, expectedTx
 	if err != nil {
 		return fmt.Errorf("node signature decode: %w", err)
 	}
-	valid, err := crypto.IsSignatureValid(signerKey, []byte(b.Hash), sig, keyType)
+	valid, err := crypto.IsSignatureValid(crypto.DomainBlock, signerKey, []byte(b.Hash), sig, keyType)
 	if err != nil {
 		return fmt.Errorf("node signature verify: %w", err)
 	}

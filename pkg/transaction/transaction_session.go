@@ -213,7 +213,7 @@ func (session *UL_TransactionSession) GenerateTransaction(ctx context.Context, i
 	commitment := input.GetSignatureDigest()
 
 	// Sign the commitment
-	signature, err := session.wallet.GetKey().SignData(commitment)
+	signature, err := session.wallet.GetKey().SignWithContext(crypto.DomainTransaction, commitment)
 	if err != nil {
 		return ULTransaction{}, err
 	}

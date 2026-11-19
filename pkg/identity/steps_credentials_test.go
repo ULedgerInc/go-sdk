@@ -72,7 +72,7 @@ func signResolutionEnvelope(t *testing.T, key crypto.ULKey, chainId string, payl
 	}
 	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
 	signingInput := base64.RawURLEncoding.EncodeToString(freshnessJSON) + "." + payloadB64
-	sig, err := key.SignData([]byte(signingInput))
+	sig, err := key.SignWithContext(crypto.DomainDIDResolution, []byte(signingInput))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -31,19 +31,54 @@ func (key *Secp256k1Key) GenerateKeyFromSeed(seed []byte) error {
 }
 
 func (key *Secp256k1Key) SignData(data []byte) ([]byte, error) {
-	if key.privateKey == nil {
-		return nil, fmt.Errorf("private key is not set")
+	if err := rejectDomainTagged(data); err != nil {
+		return nil, err
 	}
-	hasher := GetHasherByType(KeyTypeSecp256k1)
-	return key.privateKey.Sign(data, hasher)
+	return key.signRaw(data)
 }
 
 func (key *Secp256k1Key) VerifySignature(message []byte, signature []byte) (bool, error) {
+	if err := rejectDomainTagged(message); err != nil {
+		return false, err
+	}
+	return key.verifyRaw(message, signature)
+}
+
+func (key *Secp256k1Key) SignWithContext(domain SigningDomain, data []byte) ([]byte, error) {
+	msg, err := DomainSeparatedMessage(domain, data)
+	if err != nil {
+		return nil, err
+	}
+	return key.signRaw(msg)
+}
+
+func (key *Secp256k1Key) VerifyWithContext(domain SigningDomain, data, signature []byte) (bool, error) {
+	msg, err := DomainSeparatedMessage(domain, data)
+	if err != nil {
+		return false, err
+	}
+	return key.verifyRaw(msg, signature)
+}
+
+func (key *Secp256k1Key) signRaw(data []byte) ([]byte, error) {
+	if key.privateKey == nil {
+		return nil, fmt.Errorf("private key is not set")
+	}
+	signature, err := key.privateKey.Sign(data, GetHasherByType(KeyTypeSecp256k1))
+	if err != nil {
+		return nil, err
+	}
+	if ok, err := key.verifyRaw(data, signature); err != nil || !ok {
+		return nil, errSignatureSelfCheck
+	}
+	return signature, nil
+}
+
+func (key *Secp256k1Key) verifyRaw(message []byte, signature []byte) (bool, error) {
 	if key.publicKey == nil {
 		return false, fmt.Errorf("public key is not set")
 	}
-	hasher := GetHasherByType(KeyTypeSecp256k1)
-	return key.publicKey.Verify(signature, message, hasher)
+	return key.publicKey.Verify(signature, message, GetHasherByType(KeyTypeSecp256k1))
 }
 
 func (key *Secp256k1Key) GetPublicKeyHex(compressed bool) string {

@@ -306,7 +306,7 @@ func buildVerifiableProof(t *testing.T, blockchainId, txId string) *transaction.
 	if err := key.GenerateKeyFromSeed(seed); err != nil {
 		t.Fatalf("key: %v", err)
 	}
-	sig, err := key.SignData([]byte(block.Hash))
+	sig, err := key.SignWithContext(crypto.DomainBlock, []byte(block.Hash))
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}

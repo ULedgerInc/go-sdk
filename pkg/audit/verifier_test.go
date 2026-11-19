@@ -16,6 +16,13 @@ func signedBlock(t *testing.T) (*transaction.TxInclusionProofPackage, crypto.Key
 
 func signedBlockWithHexEncoder(t *testing.T, encodeHex func([]byte) string) (*transaction.TxInclusionProofPackage, crypto.KeyType) {
 	t.Helper()
+	return signedBlockWith(t, encodeHex, func(key crypto.ULKey, hash string) ([]byte, error) {
+		return key.SignWithContext(crypto.DomainBlock, []byte(hash))
+	})
+}
+
+func signedBlockWith(t *testing.T, encodeHex func([]byte) string, sign func(key crypto.ULKey, hash string) ([]byte, error)) (*transaction.TxInclusionProofPackage, crypto.KeyType) {
+	t.Helper()
 	txs := make([]*transaction.ULTransaction, 0, 3)
 	for _, id := range []string{"aa", "bb", "cc"} {
 		tx := &transaction.ULTransaction{}
@@ -42,7 +49,7 @@ func signedBlockWithHexEncoder(t *testing.T, encodeHex func([]byte) string) (*tr
 	if err := key.GenerateKeyFromSeed(seed); err != nil {
 		t.Fatalf("key: %v", err)
 	}
-	sig, err := key.SignData([]byte(block.Hash))
+	sig, err := sign(key, block.Hash)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -67,6 +74,22 @@ func TestVerifyTxInclusionProof_UppercaseCasingStillValid(t *testing.T) {
 	pkg, kt := signedBlockWithHexEncoder(t, crypto.BytesToHex)
 	if err := VerifyTxInclusionProof(pkg, "bb", kt, "chain-1"); err != nil {
 		t.Fatalf("expected uppercase hex fields to still verify, got %v", err)
+	}
+}
+
+func TestVerifyTxInclusionProof_RejectsSignatureOutsideBlockDomain(t *testing.T) {
+	for name, sign := range map[string]func(key crypto.ULKey, hash string) ([]byte, error){
+		"raw": func(key crypto.ULKey, hash string) ([]byte, error) {
+			return key.SignData([]byte(hash))
+		},
+		"vote domain": func(key crypto.ULKey, hash string) ([]byte, error) {
+			return key.SignWithContext(crypto.DomainVote, []byte(hash))
+		},
+	} {
+		pkg, kt := signedBlockWith(t, hex.EncodeToString, sign)
+		if err := VerifyTxInclusionProof(pkg, "bb", kt, "chain-1"); err == nil {
+			t.Fatalf("%s: block signature outside the block domain was accepted", name)
+		}
 	}
 }
 

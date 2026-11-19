@@ -61,8 +61,9 @@ func (e *ErrInvalidHashingStrategy) Error() string {
 	return fmt.Sprintf("invalid hashing strategy, %s", e.Msg)
 }
 
-// ParseHashingStrategy accepts only the non-MiMC strategies: MiMC hashers are
-// consensus-relevant field-arithmetic hashers with no offline client equivalent.
+// ParseHashingStrategy only accepts the non-MiMC strategies: the node's MiMC
+// hashers are consensus-relevant field-arithmetic hashers with no client-side
+// equivalent, so a block using one cannot be verified offline here.
 func ParseHashingStrategy(str string) (UL_HashingStrategy, error) {
 	switch strings.ToUpper(str) {
 	case HASH_SHA256.String():

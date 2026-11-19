@@ -28,23 +28,48 @@ func (key *MLDSA87Key) GenerateKeyFromSeed(seed []byte) error {
 }
 
 func (key *MLDSA87Key) SignData(data []byte) ([]byte, error) {
+	return key.sign(data, nil)
+}
+
+func (key *MLDSA87Key) VerifySignature(data []byte, signature []byte) (bool, error) {
+	return key.verify(data, nil, signature)
+}
+
+func (key *MLDSA87Key) SignWithContext(domain SigningDomain, data []byte) ([]byte, error) {
+	if err := validateDomain(domain); err != nil {
+		return nil, err
+	}
+	return key.sign(data, []byte(domain))
+}
+
+func (key *MLDSA87Key) VerifyWithContext(domain SigningDomain, data, signature []byte) (bool, error) {
+	if err := validateDomain(domain); err != nil {
+		return false, err
+	}
+	return key.verify(data, []byte(domain), signature)
+}
+
+func (key *MLDSA87Key) sign(data, ctx []byte) ([]byte, error) {
 	if key.privateKey == nil {
 		return nil, fmt.Errorf("private key is not set")
 	}
 
 	sig := make([]byte, mldsa87.SignatureSize)
-	err := mldsa87.SignTo(key.privateKey, data, nil, true, sig)
+	err := mldsa87.SignTo(key.privateKey, data, ctx, true, sig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to sign data, %w", err)
+	}
+	if ok, err := key.verify(data, ctx, sig); err != nil || !ok {
+		return nil, errSignatureSelfCheck
 	}
 	return sig, nil
 }
 
-func (key *MLDSA87Key) VerifySignature(data []byte, signature []byte) (bool, error) {
+func (key *MLDSA87Key) verify(data, ctx, signature []byte) (bool, error) {
 	if key.publicKey == nil {
 		return false, fmt.Errorf("public key is not set")
 	}
-	return mldsa87.Verify(key.publicKey, data, nil, signature), nil
+	return mldsa87.Verify(key.publicKey, data, ctx, signature), nil
 }
 
 func (key *MLDSA87Key) GetPublicKeyHex(compressed bool) string {
@@ -108,6 +133,9 @@ func (key *MLDSA87Key) GeneratePrivateKeyFromHex(hex string) error {
 	err = key.privateKey.UnmarshalBinary(privKeyBytes)
 	if err != nil {
 		return fmt.Errorf("unable to unmarshal private key, %w", err)
+	}
+	if key.publicKey == nil {
+		key.publicKey = key.privateKey.Public().(*mldsa87.PublicKey)
 	}
 	return nil
 }

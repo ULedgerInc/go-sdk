@@ -1,6 +1,7 @@
 package credential
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -205,6 +206,40 @@ func TestVerifySignedResolutionPinnedSignerKey(t *testing.T) {
 		t.Error("wrong pinned key must fail")
 	} else if !strings.Contains(err.Error(), "signer key does not match pinned key") {
 		t.Errorf("unexpected error for wrong pinned key: %v", err)
+	}
+}
+
+func TestVerifySignedResolutionRequiresResolutionDomain(t *testing.T) {
+	freshness := transaction.ResolutionFreshness{ChainId: "chain-1", HeadHeight: 5, HeadBlockHash: "bh", SignedAt: "2026-08-01T00:00:00Z"}
+	freshnessJSON, err := json.Marshal(freshness)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloadB64 := base64.RawURLEncoding.EncodeToString([]byte(`{"id":"did:ulnet:chain-1:aa11"}`))
+	input := resolutionSigningInput(freshnessJSON, payloadB64)
+	for _, kt := range []crypto.KeyType{crypto.KeyTypeSecp256k1, crypto.KeyTypeED25519, crypto.KeyTypeMlDSA87, crypto.KeyTypeBLS12377} {
+		key := seededKey(t, kt)
+		envelope := func(sig []byte, err error) transaction.SignedResolutionEnvelope {
+			t.Helper()
+			if err != nil {
+				t.Fatalf("%s: sign: %v", kt, err)
+			}
+			return transaction.SignedResolutionEnvelope{
+				Payload:   payloadB64,
+				Freshness: freshness,
+				Signer:    transaction.ResolutionSigner{PublicKey: key.GetPublicKeyHex(true), KeyType: kt},
+				Signature: crypto.BytesToHex(sig),
+			}
+		}
+		if _, err := VerifySignedResolution(envelope(key.SignWithContext(crypto.DomainDIDResolution, input)), "chain-1"); err != nil {
+			t.Fatalf("%s: resolution signed under its domain rejected: %v", kt, err)
+		}
+		if _, err := VerifySignedResolution(envelope(key.SignData(input)), "chain-1"); err == nil {
+			t.Fatalf("%s: raw-signed resolution accepted", kt)
+		}
+		if _, err := VerifySignedResolution(envelope(key.SignWithContext(crypto.DomainOperatorLogin, input)), "chain-1"); err == nil {
+			t.Fatalf("%s: resolution signed under the operator-login domain accepted", kt)
+		}
 	}
 }
 

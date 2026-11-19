@@ -22,7 +22,8 @@ func ChainIssuer(chainId string) string {
 	return "did:ulnet:" + chainId
 }
 
-// IdentityClaim aliases transaction.IdentityClaim, reused here rather than redefined.
+// IdentityClaim mirrors transaction.IdentityClaim, itself a mirror of the
+// node's internal/identity.IdentityClaim; reused here rather than redefined.
 type IdentityClaim = transaction.IdentityClaim
 
 type Evidence struct {
