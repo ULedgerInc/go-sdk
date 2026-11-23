@@ -50,11 +50,11 @@ const (
 const keyPairCheckMessage = "ul-wallet-key-pair-check"
 
 var (
-	errNoKeyMaterial    = errors.New("wallet file has neither a public key nor a mnemonic")
-	errMissingPublicKey = errors.New("wallet file has a private key but no public key")
-	errKeyPairMismatch  = errors.New("public key does not belong to the private key")
-	errMnemonicMismatch = errors.New("mnemonic and passphrase do not derive the stored key (wrong passphrase or mismatched file)")
-	errAddressMismatch  = errors.New("address does not match the public key")
+	ErrNoKeyMaterial    = errors.New("wallet file has neither a public key nor a mnemonic")
+	ErrMissingPublicKey = errors.New("wallet file has a private key but no public key")
+	ErrKeyPairMismatch  = errors.New("public key does not belong to the private key")
+	ErrMnemonicMismatch = errors.New("mnemonic and passphrase do not derive the stored key (wrong passphrase or mismatched file)")
+	ErrAddressMismatch  = errors.New("address does not match the public key")
 )
 
 func (w *UL_Wallet) GetKey() crypto.ULKey {
@@ -90,7 +90,7 @@ func fromWalletData(wd WalletData, passphrase string) (UL_Wallet, error) {
 	// Parse the address from the uncompressed public key hex.
 	address := ParseAddress(key.GetPublicKeyHex(false))
 	if wd.Address != "" && !strings.EqualFold(wd.Address, address) {
-		return UL_Wallet{}, fmt.Errorf("%w: file has %s, key gives %s", errAddressMismatch, wd.Address, address)
+		return UL_Wallet{}, fmt.Errorf("%w: file has %s, key gives %s", ErrAddressMismatch, wd.Address, address)
 	}
 
 	wallet := UL_Wallet{
@@ -120,7 +120,7 @@ func keyFromWalletData(wd WalletData, passphrase string) (crypto.ULKey, error) {
 
 	if wd.Mnemonic == "" {
 		if stored == nil {
-			return nil, errNoKeyMaterial
+			return nil, ErrNoKeyMaterial
 		}
 		return stored, nil
 	}
@@ -131,7 +131,7 @@ func keyFromWalletData(wd WalletData, passphrase string) (crypto.ULKey, error) {
 	}
 
 	if stored != nil && !strings.EqualFold(stored.GetPublicKeyHex(false), derived.key.GetPublicKeyHex(false)) {
-		return nil, errMnemonicMismatch
+		return nil, ErrMnemonicMismatch
 	}
 
 	return derived.key, nil
@@ -146,7 +146,7 @@ func keyFromWalletData(wd WalletData, passphrase string) (crypto.ULKey, error) {
 func keyFromHex(wd WalletData) (crypto.ULKey, error) {
 	if wd.PublicKeyHex == "" {
 		if wd.PrivateKeyHex != "" {
-			return nil, errMissingPublicKey
+			return nil, ErrMissingPublicKey
 		}
 		return nil, nil
 	}
@@ -182,12 +182,12 @@ func keyFromHex(wd WalletData) (crypto.ULKey, error) {
 func checkKeyPair(key crypto.ULKey) error {
 	sig, err := key.SignData([]byte(keyPairCheckMessage))
 	if err != nil {
-		return fmt.Errorf("%w: %v", errKeyPairMismatch, err)
+		return fmt.Errorf("%w: %v", ErrKeyPairMismatch, err)
 	}
 
 	ok, err := key.VerifySignature([]byte(keyPairCheckMessage), sig)
 	if err != nil || !ok {
-		return errKeyPairMismatch
+		return ErrKeyPairMismatch
 	}
 
 	return nil
